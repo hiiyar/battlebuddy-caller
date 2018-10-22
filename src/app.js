@@ -1,9 +1,14 @@
-const express = require('express')
-const app = express()
-const PUBGUserService = require('./pubg/services/users');
+const userServices = require('./pubg/services/users');
 
-app.listen(5001, function(){
+try {
 
-    setInterval(PUBGUserService.updateAllUserDetails, 5000);
+    userServices.updateAllUserDetails()
+        .then(function(e){
+            console.log(e);
+        }).catch(function(e){
+            console.log(e);
+        });
 
-});
+} catch (e) {
+    console.log(e);
+}

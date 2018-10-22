@@ -1,20 +1,41 @@
 const repoUser = require('../repositories/user');
+const configApp = require('../../config/app');
+const regions = ["pc-na", "pc-sa"];
 
 updateSingleUserDetails = async (player) => {
 
     try {
 
-        let response = await repoUser.getUserDetailsFromApi(player._source.integrations.pubg.playerName);
+        regions.forEach(async function(region, index){
 
-        const data = response.data.data[0];
+            let response = await repoUser.getUserDetailsFromApi(player.integrations.pubg.playerName, region);
 
-        player._source.integrations.pubg.accountid = data.id;
-        player._source.integrations.pubg.region = data.attributes.shardId;
-        player._source.integrations.pubg.createdAt = data.attributes.createdAt;
-        player._source.integrations.pubg.updatedAt = data.attributes.updatedAt;
-        player._source.integrations.pubg.version = data.attributes.patchVersion;
+            const data = response.data.data[0];
 
-        return await repoUser.updateUserDetailsOnDatabase(player);
+            player.integrations.pubg.shardId = data.attributes.shardId;
+            player.integrations.pubg.accountId = data.id;
+            player.integrations.pubg.createdAt = data.attributes.createdAt;
+            player.integrations.pubg.updatedAt = data.attributes.updatedAt;
+            player.integrations.pubg.version = data.attributes.patchVersion;
+
+            let regionIndex = player.integrations.pubg.regions.findIndex(k => k.shardId === region);
+
+            let regionObject = {
+                shardId: data.attributes.shardId,
+                totalKills: 0,
+                totalWins: 0,
+                lastMatch: (data.relationships.matches.data[0]) ? data.relationships.matches.data[0].id : null
+            };
+
+            (regionIndex > -1) ?
+                player.integrations.pubg.regions[regionIndex] = regionObject :
+                player.integrations.pubg.regions.push(regionObject);
+
+
+            await repoUser.updateUserDetailsOnDatabase(player);
+        });
+
+        return true;
 
     } catch (error) {
 
@@ -22,7 +43,61 @@ updateSingleUserDetails = async (player) => {
 
         return false;
     }
+}
 
+
+updateMultipleUserDetails = async (players) => {
+
+    try {
+
+        let playerNames = [];
+        players.forEach(function(element, index){
+            playerNames.push(element.integrations.pubg.playerName);
+        });
+
+        regions.forEach(async function(region, index){
+
+            const response = await repoUser.getMultipleUserDetailsFromApi(playerNames, region);
+
+            const data = response.data.data;
+
+            data.forEach(async function(data, index) {
+
+                let player = players.find(k => k.integrations.pubg.playerName === data.attributes.name);
+
+                player.integrations.pubg.shardId = data.attributes.shardId;
+                player.integrations.pubg.accountId = data.id;
+                player.integrations.pubg.createdAt = data.attributes.createdAt;
+                player.integrations.pubg.updatedAt = data.attributes.updatedAt;
+                player.integrations.pubg.version = data.attributes.patchVersion;
+
+                let regionIndex = player.integrations.pubg.regions.findIndex(k => k.shardId === region);
+
+                let regionObject = {
+                    shardId: data.attributes.shardId,
+                    totalKills: 0,
+                    totalWins: 0,
+                    lastMatch: (data.relationships.matches.data[0]) ? data.relationships.matches.data[0].id : null
+                };
+
+                (regionIndex > -1) ?
+                    player.integrations.pubg.regions[regionIndex] = regionObject :
+                    player.integrations.pubg.regions.push(regionObject);
+
+                await repoUser.updateUserDetailsOnDatabase(player);
+
+            });
+
+        });
+
+        return true;
+
+    } catch (error) {
+
+        console.log(error);
+
+        return false;
+    }
 }
 
 module.exports = updateSingleUserDetails;
@@ -31,15 +106,24 @@ module.exports.updateAllUserDetails = async () => {
 
     try {
 
-        let listPlayers = await repoUser.listUsersThatNeedsUpdate();
+        let listAllPlayers = await repoUser.getUsersThatNeedsUpdate();
+        let listPlayersToUpdate = [];
 
-        if (listPlayers) {
-            listPlayers.forEach(function (player, index, array) {
-                updateSingleUserDetails(player);
+        if (listAllPlayers) {
+
+            listAllPlayers.forEach(function(player, index) {
+
+                listPlayersToUpdate.push(player);
+                if (listPlayersToUpdate.length % configApp.pubg.maxPlayersToCallAPI === 0){
+                    updateMultipleUserDetails(listPlayersToUpdate);
+                    listPlayersToUpdate = [];
+                }
             });
+            updateMultipleUserDetails(listPlayersToUpdate);
+
         }
 
-        console.log('Updated all users');
+        return listAllPlayers;
 
     } catch (e) {
 

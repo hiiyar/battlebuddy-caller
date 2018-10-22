@@ -1,18 +1,28 @@
 version: "3"
 
 services:
-  kibana: 
-    image: docker.elastic.co/kibana/kibana:6.4.2
+  mongo:
+    image: mongo
+    restart: always
     ports:
-      - 5601:5601
-    environment:
-      - "ELASTICSEARCH_URL=http://elastic:9200"
-    depends_on:
-      - elastic
-  
-  elastic:
-    image: docker.elastic.co/elasticsearch/elasticsearch:6.4.2
+      - 27017:27017
+    expose:
+      - 27017
     volumes:
-      - ./data:/usr/share/elasticsearch/data
+      - ./data/mongodb:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    depends_on:
+      - mongo
     ports:
-      - 9200:9200
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: example
+
+
